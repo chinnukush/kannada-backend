@@ -15,8 +15,8 @@ BASE_URL = "unconscious-frieda-koyebuser123-c7a52ee0.koyeb.app"
 PORT = "8000"
 
 # Update
-UPSTREAM_REPO = "https://github.com/chinnukush/backend"
-UPSTREAM_BRANCH = "main"
+UPSTREAM_REPO = "https://github.com/chinnukush/kannada-backend"
+UPSTREAM_BRANCH = "kannada"
 
 # Additional CDN Bots
 # MULTI_TOKEN1 = "7390174586:AAGlfMP3iN70hjpHAfB8YcUna5tDgpLXC4w"
