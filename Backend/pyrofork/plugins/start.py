@@ -9,9 +9,9 @@ from Backend.helper.metadata import metadata
 from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.pyrofork import StreamBot
 from pyrogram import filters, Client
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from os import path as ospath
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, ChatAdminRequired, UserNotParticipant
 from pyrogram.enums.parse_mode import ParseMode
 from themoviedb import aioTMDb
 from asyncio import Queue, create_task
@@ -19,16 +19,19 @@ from os import execl as osexecl
 from asyncio import create_subprocess_exec, gather
 from sys import executable
 from aiofiles import open as aiopen
-from pyrogram import enums
-from pyrogram.errors import UserNotParticipant
-
+from pyrogram import enums, Client, filters
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
 
 tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 # Initialize database connection
 import random
 import string
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
+
+# Define CHANNEL here
+CHANNEL = int(os.getenv("CHANNEL", "-1002440757122"))  # fallback to your channel ID
+
+
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -36,6 +39,16 @@ def generate_password(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
+async def is_req_subscribed(client: Client, message: Message) -> bool:
+    try:
+        member = await client.get_chat_member(CHANNEL, message.from_user.id)
+        return member.status in ("member", "administrator", "creator")
+    except UserNotParticipant:
+        return False
+    except Exception as e:
+        LOGGER.error(f"Error checking subscription: {e}")
+        return False
+        
 @StreamBot.on_message(filters.command("user") & filters.private & CustomFilters.owner)
 async def create_user(bot: Client, message: Message):
     try:
@@ -78,22 +91,6 @@ async def create_user(bot: Client, message: Message):
     except Exception as e:
         LOGGER.error(f"Error in /user command: {e}")
         await message.reply_text("❌ An error occurred while creating the user.")
-
-async def is_req_subscribed(client: Client, message: Message) -> bool:
-    """
-    Check if the user is subscribed to the CHANNEL.
-    Returns True if subscribed, False otherwise.
-    """
-    try:
-        member = await client.get_chat_member(int(CHANNEL), message.from_user.id)
-        if member.status in ("member", "administrator", "creator"):
-            return True
-        return False
-    except UserNotParticipant:
-        return False
-    except Exception as e:
-        LOGGER.error(f"Error checking subscription: {e}")
-        return False
         
 @StreamBot.on_message(filters.command('restart') & filters.private & CustomFilters.owner)
 async def restart(bot: Client, message: Message):
