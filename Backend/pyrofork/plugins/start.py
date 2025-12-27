@@ -135,86 +135,54 @@ async def delete_messages_after_delay(messages):
 @StreamBot.on_message(filters.command('start') & filters.private)
 async def start(bot: Client, message: Message):
     LOGGER.info(f"Received command: {message.text}")
-    
     command_part = message.text.split('start ')[-1]
-    
+
     if command_part.startswith("file_"):
         usr_cmd = command_part[len("file_"):].strip()
-        
-        parts = usr_cmd.split("_")
-        
-        if len(parts) == 2:
-            try:
-                tmdb_id, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = None
-                quality_details = await db.get_quality_details(tmdb_id, quality)
-            except ValueError:
-                LOGGER.error(f"Error parsing movie command: {usr_cmd}")
-                await message.reply_text("Invalid command format for movie.")
-                return
-        
-        elif len(parts) == 3:
-            try:
-                tmdb_id, season, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = int(season)
-                quality_details = await db.get_quality_details(tmdb_id, quality, season)
-            except ValueError:
-                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
-                await message.reply_text("Invalid command format for TV show.")
-                return
-        elif len(parts) == 4:
-            try:
-                tmdb_id, season, episode, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = int(season)
-                episode = int(episode)
-                quality_details = await db.get_quality_details(tmdb_id, quality, season, episode)
-            except ValueError:
-                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
-                await message.reply_text("Invalid command format for TV show.")
-                return
 
-        else:
-            await message.reply_text("Invalid command format.")
+        # --- Force Subscribe Check ---
+        channel_id = Telegram.AUTH_CHANNEL[0]  # assuming single channel
+        is_subscribed = await check_fsub(bot, message.from_user.id, channel_id)
+
+        if not is_subscribed:
+            invite_link = await bot.create_chat_invite_link(channel_id)
+            pending_requests[message.from_user.id] = usr_cmd
+            await message.reply_text(
+                f"⚠️ To access files, you must join our channel first:\n\n"
+                f"👉 [Join Channel]({invite_link.invite_link})\n\n"
+                f"After joining, the bot will automatically send your file.",
+                disable_web_page_preview=True,
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
 
-        sent_messages = []
-        for detail in quality_details:
-            decoded_data = await decode_string(detail['id'])
-            channel = f"-100{decoded_data['chat_id']}"
-            msg_id = decoded_data['msg_id']
-            name = detail['name']
-            if "\\n" in name and name.endswith(".mkv"):
-                name = name.rsplit(".mkv", 1)[0].replace("\\n", "\n")
-            try:
-                file = await bot.get_messages(int(channel), int(msg_id))
-                media = file.document or file.video
-                if media:
-                    sent_msg = await message.reply_cached_media(
-                        file_id=media.file_id,
-                        caption=f'{name}'
-                    )
-                    sent_messages.append(sent_msg)
-                    await asleep(1)
-            except FloodWait as e:
-                LOGGER.info(f"Sleeping for {e.value}s")
-                await asleep(e.value)
-                await message.reply_text(f"Got Floodwait of {e.value}s")
-            except Exception as e:
-                LOGGER.error(f"Error retrieving/sending media: {e}")
-                await message.reply_text("Error retrieving media.")
+        # --- Continue with your existing file sending logic ---
+        await send_file(bot, message, usr_cmd)
 
-        if sent_messages:
-            warning_msg = await message.reply_text(
-                "Forward these files to your saved messages. These files will be deleted from the bot within 5 minutes."
-            )
-            sent_messages.append(warning_msg)
-            create_task(delete_messages_after_delay(sent_messages))
     else:
-        await message.reply_text("ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://hk-movies.vercel.app 📥 ɪᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!")
+        await message.reply_text(
+            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ..."
+        )
 
+@StreamBot.on_chat_member_updated()
+async def member_update(bot: Client, event):
+    if not event.new_chat_member or not event.new_chat_member.user:
+        return
+
+    user_id = event.new_chat_member.user.id
+
+    if user_id not in pending_requests:
+        return
+
+    usr_cmd = pending_requests.pop(user_id)
+
+    try:
+        # Send file directly to user’s private chat
+        msg = await bot.send_message(user_id, "📥 Thanks for joining! Preparing your file...")
+        await send_file(bot, msg, usr_cmd)
+    except Exception as e:
+        LOGGER.error(f"Error sending file after join for {user_id}: {e}")
+        await bot.send_message(user_id, "❌ Failed to send your file. Please try again.")
 
 
 @StreamBot.on_message(filters.command('log') & filters.private & CustomFilters.owner)
