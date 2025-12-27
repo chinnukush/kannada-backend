@@ -256,17 +256,30 @@ async def send_file(bot: Client, message: Message, usr_cmd: str):
         asyncio.create_task(delete_messages_after_delay(sent_messages))
 
 # 🔔 Listen for channel join events
+
 @StreamBot.on_chat_member_updated()
 async def member_update(bot: Client, event):
+    # Guard clause: skip if no new member info
     if not event.new_chat_member or not event.new_chat_member.user:
-    return
-        usr_cmd = pending_requests.pop(event.new_chat_member.user.id)
-        # Send file automatically after join
-        dummy_msg = Message(
-            id=0, chat=event.new_chat_member.user, from_user=event.new_chat_member.user
-        )
-        await send_file(bot, dummy_msg, usr_cmd)
+        return
 
+    user_id = event.new_chat_member.user.id
+
+    # Only proceed if we have a pending request for this user
+    if user_id not in pending_requests:
+        return
+
+    usr_cmd = pending_requests.pop(user_id)
+
+    # Construct a dummy message safely
+    dummy_msg = Message(
+        id=0,
+        chat=Chat(id=user_id, type="private"),  # ensure .chat.type exists
+        from_user=event.new_chat_member.user
+    )
+
+    # Send the file automatically after join
+    await send_file(bot, dummy_msg, usr_cmd)
 
 
 @StreamBot.on_message(filters.command('log') & filters.private & CustomFilters.owner)
