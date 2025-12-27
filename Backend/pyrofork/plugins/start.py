@@ -29,8 +29,7 @@ import random
 import string
 import os
 # Define CHANNEL here
-CHANNEL = int(os.getenv("CHANNEL", "-1002440757122"))  # fallback to your channel ID
-
+CHANNEL = int(os.getenv("CHANNEL", "-1002440757122"))  # replace with your channel ID
 
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -38,16 +37,6 @@ pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def generate_password(length=10):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
-
-async def is_req_subscribed(client: Client, message: Message) -> bool:
-    try:
-        member = await client.get_chat_member(CHANNEL, message.from_user.id)
-        return member.status in ("member", "administrator", "creator")
-    except UserNotParticipant:
-        return False
-    except Exception as e:
-        LOGGER.error(f"Error checking subscription: {e}")
-        return False
         
 @StreamBot.on_message(filters.command("user") & filters.private & CustomFilters.owner)
 async def create_user(bot: Client, message: Message):
@@ -119,9 +108,6 @@ async def restart(bot: Client, message: Message):
         LOGGER.error(f"Error during restart: {e}")
         await message.reply_text("**❌ Failed to restart. Check logs for details.**")
 
-
-
-
 async def delete_messages_after_delay(messages):
     await asleep(300)  
     for msg in messages:
@@ -131,37 +117,50 @@ async def delete_messages_after_delay(messages):
             LOGGER.error(f"Error deleting message {msg.id}: {e}")
         await asleep(2)  
 
+
+# Define your channel ID (set via env or hardcode)
+
+async def is_req_subscribed(client: Client, message) -> bool:
+    """Check if user is subscribed to CHANNEL."""
+    try:
+        member = await client.get_chat_member(CHANNEL, message.from_user.id)
+        return member.status in ("member", "administrator", "creator")
+    except UserNotParticipant:
+        return False
+    except Exception as e:
+        LOGGER.error(f"Error checking subscription: {e}")
+        return False
+
+
 @StreamBot.on_message(filters.command('start') & filters.private)
-async def start(bot: Client, message: Message):
+async def start(bot: Client, message):
     LOGGER.info(f"Received command: {message.text}")
 
-    # 🔒 Force Subscribe Check
-    if CHANNEL and not await is_req_subscribed(bot, message):
-        try:
-            invite_link = await bot.create_chat_invite_link(
-                int(CHANNEL), creates_join_request=True
-            )
-        except ChatAdminRequired:
-            LOGGER.error("Make sure Bot is admin in ForceSub channel")
-            return
-
-        btn = [
-            [
-                InlineKeyboardButton(
-                    "📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌", url=invite_link.invite_link
-                )
-            ]
-        ]
-        await message.reply_text(
-            "⚠️ You must join our updates channel to use this bot.",
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
-        return  # 🚫 Stop execution until user joins
-
-    # ✅ Continue with normal command parsing
     command_part = message.text.split('start ')[-1]
 
     if command_part.startswith("file_"):
+        # 🔒 Force Subscribe check only for deep-link
+        if CHANNEL and not await is_req_subscribed(bot, message):
+            try:
+                invite_link = await bot.create_chat_invite_link(
+                    int(CHANNEL), creates_join_request=True
+                )
+            except ChatAdminRequired:
+                LOGGER.error("Make sure Bot is admin in ForceSub channel")
+                return
+
+            btn = [[
+                InlineKeyboardButton(
+                    "📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌", url=invite_link.invite_link
+                )
+            ]]
+            await message.reply_text(
+                "⚠️ You must join our updates channel to access files.",
+                reply_markup=InlineKeyboardMarkup(btn)
+            )
+            return  # 🚫 Stop here until user joins
+
+        # ✅ Continue with your existing file logic
         usr_cmd = command_part[len("file_"):].strip()
         parts = usr_cmd.split("_")
 
@@ -202,6 +201,8 @@ async def start(bot: Client, message: Message):
         else:
             await message.reply_text("Invalid command format.")
             return
+
+        # 🔽 Your existing file sending loop remains unchanged
         sent_messages = []
         for detail in quality_details:
             decoded_data = await decode_string(detail['id'])
@@ -234,9 +235,12 @@ async def start(bot: Client, message: Message):
             )
             sent_messages.append(warning_msg)
             create_task(delete_messages_after_delay(sent_messages))
-    else:
-        await message.reply_text("ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://hari-moviez.vercel.app 📥 ɪᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!")
 
+    else:
+        # ✅ Plain /start → welcome message
+        await message.reply_text(
+            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://hk-movies.vercel.app 📥 ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
+        )
 
 
 @StreamBot.on_message(filters.command('log') & filters.private & CustomFilters.owner)
