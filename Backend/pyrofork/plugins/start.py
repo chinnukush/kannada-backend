@@ -206,33 +206,6 @@ async def start(bot: Client, message: Message):
             await message.reply_text("Invalid command format.")
             return
 
-        elif len(parts) == 3:
-            try:
-                tmdb_id, season, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = int(season)
-                quality_details = await db.get_quality_details(tmdb_id, quality, season)
-            except ValueError:
-                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
-                await message.reply_text("Invalid command format for TV show.")
-                return
-
-        elif len(parts) == 4:
-            try:
-                tmdb_id, season, episode, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = int(season)
-                episode = int(episode)
-                quality_details = await db.get_quality_details(tmdb_id, quality, season, episode)
-            except ValueError:
-                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
-                await message.reply_text("Invalid command format for TV show.")
-                return
-
-        else:
-            await message.reply_text("Invalid command format.")
-            return
-
         else:
             await message.reply_text("Invalid command format.")
             return
