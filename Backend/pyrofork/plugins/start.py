@@ -22,6 +22,7 @@ from aiofiles import open as aiopen
 from pyrogram import enums, Client, filters
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
+from pyrogram.handlers import ChatMemberUpdatedHandler
 
 tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 # Initialize database connection
