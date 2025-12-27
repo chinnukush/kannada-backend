@@ -11,7 +11,7 @@ from Backend.pyrofork import StreamBot
 from pyrogram import filters, Client
 from pyrogram.types import Message
 from os import path as ospath
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, UserNotParticipant
 from pyrogram.enums.parse_mode import ParseMode
 from themoviedb import aioTMDb
 from asyncio import Queue, create_task
@@ -20,6 +20,21 @@ from asyncio import create_subprocess_exec, gather
 from sys import executable
 from aiofiles import open as aiopen
 from pyrogram import enums
+
+
+pending_requests = {}  # user_id -> usr_cmd
+
+async def check_fsub(bot: Client, user_id: int, channel_id: str) -> bool:
+    try:
+        member = await bot.get_chat_member(channel_id, user_id)
+        if member.status in ("kicked", "left"):
+            return False
+        return True
+    except UserNotParticipant:
+        return False
+    except Exception as e:
+        LOGGER.error(f"FSUB check failed: {e}")
+        return False
 
 
 tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
