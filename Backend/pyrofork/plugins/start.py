@@ -20,7 +20,7 @@ from asyncio import create_subprocess_exec, gather
 from sys import executable
 from aiofiles import open as aiopen
 from pyrogram import enums
-
+from pyrogram.errors import UserNotParticipant
 
 tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 # Initialize database connection
@@ -78,6 +78,25 @@ async def create_user(bot: Client, message: Message):
         LOGGER.error(f"Error in /user command: {e}")
         await message.reply_text("❌ An error occurred while creating the user.")
 
+async def is_req_subscribed(client: Client, message: Message) -> bool:
+    """
+    Check if the user is subscribed to the AUTH_CHANNEL.
+    Returns True if subscribed, False otherwise.
+    """
+    try:
+        member = await client.get_chat_member(int(AUTH_CHANNEL), message.from_user.id)
+        # If user is in the channel, they are subscribed
+        if member.status in ("member", "administrator", "creator"):
+            return True
+        return False
+    except UserNotParticipant:
+        # User is not a participant
+        return False
+    except Exception as e:
+        # Any other error (e.g., bot not admin, invalid channel ID)
+        LOGGER.error(f"Error checking subscription: {e}")
+        return False
+        
 @StreamBot.on_message(filters.command('restart') & filters.private & CustomFilters.owner)
 async def restart(bot: Client, message: Message):
     try:
@@ -120,14 +139,37 @@ async def delete_messages_after_delay(messages):
 @StreamBot.on_message(filters.command('start') & filters.private)
 async def start(bot: Client, message: Message):
     LOGGER.info(f"Received command: {message.text}")
-    
+
+    # 🔒 Force Subscribe Check
+    if AUTH_CHANNEL and not await is_req_subscribed(bot, message):
+        try:
+            invite_link = await bot.create_chat_invite_link(
+                int(AUTH_CHANNEL), creates_join_request=True
+            )
+        except ChatAdminRequired:
+            LOGGER.error("Make sure Bot is admin in ForceSub channel")
+            return
+
+        btn = [
+            [
+                InlineKeyboardButton(
+                    "📌 ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇꜱ ᴄʜᴀɴɴᴇʟ 📌", url=invite_link.invite_link
+                )
+            ]
+        ]
+        await message.reply_text(
+            "⚠️ You must join our updates channel to use this bot.",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+        return  # 🚫 Stop execution until user joins
+
+    # ✅ Continue with normal command parsing
     command_part = message.text.split('start ')[-1]
-    
+
     if command_part.startswith("file_"):
         usr_cmd = command_part[len("file_"):].strip()
-        
         parts = usr_cmd.split("_")
-        
+
         if len(parts) == 2:
             try:
                 tmdb_id, quality = parts
@@ -138,7 +180,7 @@ async def start(bot: Client, message: Message):
                 LOGGER.error(f"Error parsing movie command: {usr_cmd}")
                 await message.reply_text("Invalid command format for movie.")
                 return
-        
+
         elif len(parts) == 3:
             try:
                 tmdb_id, season, quality = parts
@@ -149,6 +191,7 @@ async def start(bot: Client, message: Message):
                 LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
                 await message.reply_text("Invalid command format for TV show.")
                 return
+
         elif len(parts) == 4:
             try:
                 tmdb_id, season, episode, quality = parts
@@ -160,6 +203,10 @@ async def start(bot: Client, message: Message):
                 LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
                 await message.reply_text("Invalid command format for TV show.")
                 return
+
+        else:
+            await message.reply_text("Invalid command format.")
+            return
 
         else:
             await message.reply_text("Invalid command format.")
