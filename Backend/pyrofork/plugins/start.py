@@ -22,6 +22,7 @@ from aiofiles import open as aiopen
 from pyrogram import enums
 from pyrogram.errors import UserNotParticipant
 
+
 tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 # Initialize database connection
 import random
@@ -80,20 +81,17 @@ async def create_user(bot: Client, message: Message):
 
 async def is_req_subscribed(client: Client, message: Message) -> bool:
     """
-    Check if the user is subscribed to the AUTH_CHANNEL.
+    Check if the user is subscribed to the CHANNEL.
     Returns True if subscribed, False otherwise.
     """
     try:
-        member = await client.get_chat_member(int(AUTH_CHANNEL), message.from_user.id)
-        # If user is in the channel, they are subscribed
+        member = await client.get_chat_member(int(CHANNEL), message.from_user.id)
         if member.status in ("member", "administrator", "creator"):
             return True
         return False
     except UserNotParticipant:
-        # User is not a participant
         return False
     except Exception as e:
-        # Any other error (e.g., bot not admin, invalid channel ID)
         LOGGER.error(f"Error checking subscription: {e}")
         return False
         
@@ -141,10 +139,10 @@ async def start(bot: Client, message: Message):
     LOGGER.info(f"Received command: {message.text}")
 
     # 🔒 Force Subscribe Check
-    if AUTH_CHANNEL and not await is_req_subscribed(bot, message):
+    if CHANNEL and not await is_req_subscribed(bot, message):
         try:
             invite_link = await bot.create_chat_invite_link(
-                int(AUTH_CHANNEL), creates_join_request=True
+                int(CHANNEL), creates_join_request=True
             )
         except ChatAdminRequired:
             LOGGER.error("Make sure Bot is admin in ForceSub channel")
@@ -180,6 +178,33 @@ async def start(bot: Client, message: Message):
                 LOGGER.error(f"Error parsing movie command: {usr_cmd}")
                 await message.reply_text("Invalid command format for movie.")
                 return
+
+        elif len(parts) == 3:
+            try:
+                tmdb_id, season, quality = parts
+                tmdb_id = int(tmdb_id)
+                season = int(season)
+                quality_details = await db.get_quality_details(tmdb_id, quality, season)
+            except ValueError:
+                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
+                await message.reply_text("Invalid command format for TV show.")
+                return
+
+        elif len(parts) == 4:
+            try:
+                tmdb_id, season, episode, quality = parts
+                tmdb_id = int(tmdb_id)
+                season = int(season)
+                episode = int(episode)
+                quality_details = await db.get_quality_details(tmdb_id, quality, season, episode)
+            except ValueError:
+                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
+                await message.reply_text("Invalid command format for TV show.")
+                return
+
+        else:
+            await message.reply_text("Invalid command format.")
+            return
 
         elif len(parts) == 3:
             try:
