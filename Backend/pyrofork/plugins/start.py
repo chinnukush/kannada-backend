@@ -27,7 +27,7 @@ tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 # Initialize database connection
 import random
 import string
-
+import os
 # Define CHANNEL here
 CHANNEL = int(os.getenv("CHANNEL", "-1002440757122"))  # fallback to your channel ID
 
