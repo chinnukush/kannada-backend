@@ -29,6 +29,10 @@ tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 import random
 import string
 import os
+
+
+# Temporary store for pending requests
+pending_requests = {}
 # Define CHANNEL here
 CHANNEL = int(os.getenv("CHANNEL", "-1002440757122"))  # replace with your channel ID
 
