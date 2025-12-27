@@ -29,7 +29,7 @@ tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 import random
 import string
 import os
-
+import asyncio
 
 # Temporary store for pending requests
 pending_requests = {}
@@ -180,9 +180,10 @@ async def start(bot: Client, message: Message):
 
 
 async def send_file(bot: Client, message: Message, usr_cmd: str):
-    """Your existing file sending logic extracted into a helper."""
+    """Helper to send cached media files safely with proper error handling."""
     parts = usr_cmd.split("_")
 
+    # --- Parse command ---
     try:
         if len(parts) == 2:
             tmdb_id, quality = parts
@@ -203,45 +204,56 @@ async def send_file(bot: Client, message: Message, usr_cmd: str):
             quality_details = await db.get_quality_details(tmdb_id, quality, season, episode)
 
         else:
-            await message.reply_text("Invalid command format.")
+            await message.reply_text("Invalid command format.", quote=False)
             return
     except ValueError:
-        await message.reply_text("Invalid command format.")
+        await message.reply_text("Invalid command format.", quote=False)
         return
 
     sent_messages = []
+
+    # --- Loop through quality details ---
     for detail in quality_details:
-        decoded_data = await decode_string(detail['id'])
+        decoded_data = await decode_string(detail["id"])
         channel = f"-100{decoded_data['chat_id']}"
-        msg_id = decoded_data['msg_id']
-        name = detail['name']
+        msg_id = decoded_data["msg_id"]
+        name = detail["name"]
+
+        # Fix formatting for mkv names
         if "\\n" in name and name.endswith(".mkv"):
             name = name.rsplit(".mkv", 1)[0].replace("\\n", "\n")
+
         try:
             file = await bot.get_messages(int(channel), int(msg_id))
             media = file.document or file.video
+
             if media:
                 sent_msg = await message.reply_cached_media(
                     file_id=media.file_id,
-                    caption=f'{name}'
+                    caption=name,
+                    quote=False  # prevent 'User' object .type errors
                 )
                 sent_messages.append(sent_msg)
-                await asleep(1)
+                await asyncio.sleep(1)
+
         except FloodWait as e:
-            LOGGER.info(f"Sleeping for {e.value}s")
-            await asleep(e.value)
-            await message.reply_text(f"Got Floodwait of {e.value}s")
+            LOGGER.info(f"Sleeping for {e.value}s due to FloodWait")
+            await asyncio.sleep(e.value)
+            await message.reply_text(f"Got FloodWait of {e.value}s", quote=False)
+
         except Exception as e:
             LOGGER.error(f"Error retrieving/sending media: {e}")
-            await message.reply_text("Error retrieving media.")
+            await message.reply_text("Error retrieving media.", quote=False)
 
+    # --- Cleanup warning ---
     if sent_messages:
         warning_msg = await message.reply_text(
-            "Forward these files to your saved messages. These files will be deleted from the bot within 5 minutes."
+            "Forward these files to your saved messages. "
+            "These files will be deleted from the bot within 5 minutes.",
+            quote=False
         )
         sent_messages.append(warning_msg)
-        create_task(delete_messages_after_delay(sent_messages))
-
+        asyncio.create_task(delete_messages_after_delay(sent_messages))
 
 # 🔔 Listen for channel join events
 @StreamBot.on_chat_member_updated()
