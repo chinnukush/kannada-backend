@@ -246,7 +246,8 @@ async def send_file(bot: Client, message: Message, usr_cmd: str):
 # 🔔 Listen for channel join events
 @StreamBot.on_chat_member_updated()
 async def member_update(bot: Client, event):
-    if event.chat.id == CHANNEL and event.new_chat_member.user.id in pending_requests:
+    if not event.new_chat_member or not event.new_chat_member.user:
+    return
         usr_cmd = pending_requests.pop(event.new_chat_member.user.id)
         # Send file automatically after join
         dummy_msg = Message(
