@@ -205,11 +205,6 @@ async def start(bot: Client, message: Message):
         else:
             await message.reply_text("Invalid command format.")
             return
-
-        else:
-            await message.reply_text("Invalid command format.")
-            return
-
         sent_messages = []
         for detail in quality_details:
             decoded_data = await decode_string(detail['id'])
