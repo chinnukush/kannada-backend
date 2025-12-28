@@ -27,16 +27,52 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
 
+pending_requests = {}
+
+# --- Force Subscribe Check ---
+async def check_fsub(bot: Client, user_id: int) -> bool:
+    """
+    Check if user has joined all FORCE_SUB_CHANNEL(s).
+    """
+    for channel_id in Telegram.FORCE_SUB_CHANNEL:
+        try:
+            member = await bot.get_chat_member(channel_id, user_id)
+            if member.status in ("kicked", "left"):
+                return False
+        except UserNotParticipant:
+            return False
+        except Exception as e:
+            LOGGER.error(f"FSUB check failed for {channel_id}: {e}")
+            return False
+    return True
+
+
 @StreamBot.on_message(filters.command("start") & filters.private)
 async def start(bot: Client, message: Message):
     LOGGER.info(f"Received command: {message.text}")
-
     command_part = message.text.split("start ", 1)[-1]
 
     if command_part.startswith("file_"):
         usr_cmd = command_part[len("file_"):].strip()
-        parts = usr_cmd.split("_")
 
+        # 🔑 Force Subscribe check
+        is_subscribed = await check_fsub(bot, message.from_user.id)
+        if not is_subscribed:
+            buttons = []
+            for channel_id in Telegram.FORCE_SUB_CHANNEL:
+                invite = await bot.create_chat_invite_link(channel_id)
+                buttons.append([InlineKeyboardButton("📢 Join Channel", url=invite.invite_link)])
+
+            await message.reply_text(
+                "⚠️ To access files, you must join our channel(s). After joining, the bot will automatically send your file.",
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True
+            )
+            pending_requests[message.from_user.id] = usr_cmd
+            return
+
+        # ✅ Parse command parts
+        parts = usr_cmd.split("_")
         try:
             if len(parts) == 2:
                 tmdb_id, quality = parts
@@ -65,6 +101,7 @@ async def start(bot: Client, message: Message):
             await message.reply_text("Invalid command format.")
             return
 
+        # ✅ Send files
         sent_messages = []
         for detail in quality_details:
             decoded_data = await decode_string(detail["id"])
@@ -97,7 +134,6 @@ async def start(bot: Client, message: Message):
                 # No user-facing error message, just log
 
         if sent_messages:
-            # Optional warning message (remove if you don’t want it shown)
             warning_msg = await message.reply_text(
                 "Forward these files to your saved messages. "
                 "These files will be deleted from the bot within 5 minutes."
@@ -111,6 +147,7 @@ async def start(bot: Client, message: Message):
             "https://hkspot-k66q4fh4n-kushals-projects-dc9c420d.vercel.app 📥 "
             "ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
         )
+
 
 
 async def delete_messages_after_delay(messages):
