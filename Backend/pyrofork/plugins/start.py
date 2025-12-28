@@ -237,7 +237,6 @@ async def member_update(bot: Client, event):
         await send_file(bot, msg, usr_cmd)
     except Exception as e:
         LOGGER.error(f"Error sending file after join for {user_id}: {e}")
-        await bot.send_message(user_id, "❌ Failed to send your file. Please try again.")
 # -------------------------------------------------
 
 # ----------------- FILE RECEIVE HANDLER -----------------
