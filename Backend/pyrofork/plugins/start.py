@@ -19,15 +19,113 @@ from os import execl as osexecl
 from asyncio import create_subprocess_exec, gather
 from sys import executable
 from aiofiles import open as aiopen
-from pyrogram import enums
-
-
-tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
-# Initialize database connection
+from pyrogram import enums, Client, filters
+import asyncio
 import random
 import string
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
+
+
+@StreamBot.on_message(filters.command("start") & filters.private)
+async def start(bot: Client, message: Message):
+    LOGGER.info(f"Received command: {message.text}")
+
+    command_part = message.text.split("start ", 1)[-1]
+
+    if command_part.startswith("file_"):
+        usr_cmd = command_part[len("file_"):].strip()
+        parts = usr_cmd.split("_")
+
+        try:
+            if len(parts) == 2:
+                tmdb_id, quality = parts
+                tmdb_id = int(tmdb_id)
+                quality_details = await db.get_quality_details(tmdb_id, quality)
+
+            elif len(parts) == 3:
+                tmdb_id, season, quality = parts
+                tmdb_id = int(tmdb_id)
+                season = int(season)
+                quality_details = await db.get_quality_details(tmdb_id, quality, season)
+
+            elif len(parts) == 4:
+                tmdb_id, season, episode, quality = parts
+                tmdb_id = int(tmdb_id)
+                season = int(season)
+                episode = int(episode)
+                quality_details = await db.get_quality_details(tmdb_id, quality, season, episode)
+
+            else:
+                await message.reply_text("Invalid command format.")
+                return
+
+        except ValueError:
+            LOGGER.error(f"Error parsing command: {usr_cmd}")
+            await message.reply_text("Invalid command format.")
+            return
+
+        sent_messages = []
+        for detail in quality_details:
+            decoded_data = await decode_string(detail["id"])
+            channel = f"-100{decoded_data['chat_id']}"
+            msg_id = decoded_data["msg_id"]
+            name = detail["name"]
+
+            if "\\n" in name and name.endswith(".mkv"):
+                name = name.rsplit(".mkv", 1)[0].replace("\\n", "\n")
+
+            try:
+                file = await bot.get_messages(int(channel), int(msg_id))
+                media = file.document or file.video or file.audio or file.photo
+
+                if media:
+                    sent_msg = await message.reply_cached_media(
+                        file_id=media.file_id,
+                        caption=name
+                    )
+                    sent_messages.append(sent_msg)
+                    await asyncio.sleep(1)
+
+            except FloodWait as e:
+                LOGGER.info(f"Sleeping for {e.value}s due to FloodWait")
+                await asyncio.sleep(e.value)
+                await message.reply_text(f"Got FloodWait of {e.value}s")
+
+            except Exception as e:
+                LOGGER.error(f"Error retrieving/sending media: {e}")
+                # No user-facing error message, just log
+
+        if sent_messages:
+            # Optional warning message (remove if you don’t want it shown)
+            warning_msg = await message.reply_text(
+                "Forward these files to your saved messages. "
+                "These files will be deleted from the bot within 5 minutes."
+            )
+            sent_messages.append(warning_msg)
+            asyncio.create_task(delete_messages_after_delay(sent_messages))
+
+    else:
+        await message.reply_text(
+            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ "
+            "https://hkspot-k66q4fh4n-kushals-projects-dc9c420d.vercel.app 📥 "
+            "ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
+        )
+
+
+async def delete_messages_after_delay(messages):
+    """Delete sent messages after 5 minutes."""
+    await asyncio.sleep(300)
+    for msg in messages:
+        try:
+            await msg.delete()
+        except Exception as e:
+            LOGGER.error(f"Error deleting message {msg.id}: {e}")
+        await asyncio.sleep(2)
+        
+
+tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
+# Initialize database connection
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -104,102 +202,6 @@ async def restart(bot: Client, message: Message):
     except Exception as e:
         LOGGER.error(f"Error during restart: {e}")
         await message.reply_text("**❌ Failed to restart. Check logs for details.**")
-
-
-
-
-async def delete_messages_after_delay(messages):
-    await asleep(300)  
-    for msg in messages:
-        try:
-            await msg.delete()
-        except Exception as e:
-            LOGGER.error(f"Error deleting message {msg.id}: {e}")
-        await asleep(2)  
-
-@StreamBot.on_message(filters.command('start') & filters.private)
-async def start(bot: Client, message: Message):
-    LOGGER.info(f"Received command: {message.text}")
-    
-    command_part = message.text.split('start ')[-1]
-    
-    if command_part.startswith("file_"):
-        usr_cmd = command_part[len("file_"):].strip()
-        
-        parts = usr_cmd.split("_")
-        
-        if len(parts) == 2:
-            try:
-                tmdb_id, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = None
-                quality_details = await db.get_quality_details(tmdb_id, quality)
-            except ValueError:
-                LOGGER.error(f"Error parsing movie command: {usr_cmd}")
-                await message.reply_text("Invalid command format for movie.")
-                return
-        
-        elif len(parts) == 3:
-            try:
-                tmdb_id, season, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = int(season)
-                quality_details = await db.get_quality_details(tmdb_id, quality, season)
-            except ValueError:
-                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
-                await message.reply_text("Invalid command format for TV show.")
-                return
-        elif len(parts) == 4:
-            try:
-                tmdb_id, season, episode, quality = parts
-                tmdb_id = int(tmdb_id)
-                season = int(season)
-                episode = int(episode)
-                quality_details = await db.get_quality_details(tmdb_id, quality, season, episode)
-            except ValueError:
-                LOGGER.error(f"Error parsing TV show command: {usr_cmd}")
-                await message.reply_text("Invalid command format for TV show.")
-                return
-
-        else:
-            await message.reply_text("Invalid command format.")
-            return
-
-        sent_messages = []
-        for detail in quality_details:
-            decoded_data = await decode_string(detail['id'])
-            channel = f"-100{decoded_data['chat_id']}"
-            msg_id = decoded_data['msg_id']
-            name = detail['name']
-            if "\\n" in name and name.endswith(".mkv"):
-                name = name.rsplit(".mkv", 1)[0].replace("\\n", "\n")
-            try:
-                file = await bot.get_messages(int(channel), int(msg_id))
-                media = file.document or file.video
-                if media:
-                    sent_msg = await message.reply_cached_media(
-                        file_id=media.file_id,
-                        caption=f'{name}'
-                    )
-                    sent_messages.append(sent_msg)
-                    await asleep(1)
-            except FloodWait as e:
-                LOGGER.info(f"Sleeping for {e.value}s")
-                await asleep(e.value)
-                await message.reply_text(f"Got Floodwait of {e.value}s")
-            except Exception as e:
-                LOGGER.error(f"Error retrieving/sending media: {e}")
-                await message.reply_text("Error retrieving media.")
-
-        if sent_messages:
-            warning_msg = await message.reply_text(
-                "Forward these files to your saved messages. These files will be deleted from the bot within 5 minutes."
-            )
-            sent_messages.append(warning_msg)
-            create_task(delete_messages_after_delay(sent_messages))
-    else:
-        await message.reply_text("I am here to provide direct download links for movies & series from hkspot-k66q4fh4n-kushals-projects-dc9c420d.vercel.app 📥 Just send a file link to get started!")
-
 
 
 @StreamBot.on_message(filters.command('log') & filters.private & CustomFilters.owner)
