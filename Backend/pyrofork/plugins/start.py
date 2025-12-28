@@ -87,9 +87,9 @@ async def send_file(bot: Client, message: Message, usr_cmd: str):
             await asyncio.sleep(e.value)
             await message.reply_text(f"Got FloodWait of {e.value}s", quote=False)
         except Exception as e:
-            LOGGER.error(f"Error retrieving/sending media: {e}")
-            await message.reply_text("Error retrieving media.", quote=False)
-
+    LOGGER.error(f"Error retrieving/sending media: {e}")
+    continue  # silently skip without notifying the user
+    
     if sent_messages:
         warning_msg = await message.reply_text(
             "Forward these files to your saved messages. "
