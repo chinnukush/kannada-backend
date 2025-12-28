@@ -9,7 +9,7 @@ from Backend.helper.metadata import metadata
 from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.pyrofork import StreamBot
 from pyrogram import filters, Client
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from os import path as ospath
 from pyrogram.errors import FloodWait, UserNotParticipant
 from pyrogram.enums.parse_mode import ParseMode
@@ -190,9 +190,10 @@ async def restart(bot: Client, message: Message):
 
 
 # ----------------- START COMMAND -----------------
+
 @StreamBot.on_message(filters.command('start') & filters.private)
 async def start(bot: Client, message: Message):
-    command_part = message.text.split('start ')[-1]
+    command_part = message.text.split('start ', 1)[-1]
 
     if command_part.startswith("file_"):
         usr_cmd = command_part[len("file_"):].strip()
@@ -200,18 +201,17 @@ async def start(bot: Client, message: Message):
         # Force Subscribe check
         is_subscribed = await check_fsub(bot, message.from_user.id)
         if not is_subscribed:
-            # Send join links for all FSUB_CHANNELs
-            join_links = []
+            # Build inline buttons for all FSUB_CHANNELs
+            buttons = []
             for channel_id in Telegram.FSUB_CHANNEL:
                 invite = await bot.create_chat_invite_link(channel_id)
-                join_links.append(f"👉 [Join Channel]({invite.invite_link})")
+                # Use channel_id in button text if multiple channels
+                buttons.append([InlineKeyboardButton("📢 Join Channel", url=invite.invite_link)])
 
             await message.reply_text(
-                "⚠️ To access files, you must join our channel(s):\n\n" +
-                "\n".join(join_links) +
-                "\n\nAfter joining, the bot will automatically send your file.",
-                disable_web_page_preview=True,
-                parse_mode=ParseMode.MARKDOWN
+                "⚠️ To access files, you must join our channel(s). After joining, the bot will automatically send your file.",
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True
             )
             pending_requests[message.from_user.id] = usr_cmd
             return
@@ -220,11 +220,9 @@ async def start(bot: Client, message: Message):
         await send_file(bot, message, usr_cmd)
 
     else:
-        await message.reply_text("Send me a file link to get started!")
-
-    else:
+        # General welcome/info message
         await message.reply_text(
-            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://hk-movies.vercel.app 📥 ɪᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
+            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://hk-movies.vercel.app 📥 ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
         )
 # -------------------------------------------------
 
