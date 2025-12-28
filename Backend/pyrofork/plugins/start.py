@@ -44,7 +44,6 @@ async def check_fsub(bot: Client, user_id: int) -> bool:
         except Exception as e:
             LOGGER.error(f"FSUB check failed for {channel_id}: {e}")
             return False
-    return True
 
 
 @StreamBot.on_message(filters.command("start") & filters.private)
