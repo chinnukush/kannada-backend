@@ -54,10 +54,7 @@ async def start(bot: Client, message: Message):
 
     # --- Case 1: Plain /start ---
     if not command_part.startswith("file_"):
-        await message.reply_text(
-            "👋 Welcome! I provide direct download links for movies & series.\n"
-            "Just send me a file link to get started!"
-        )
+        await message.reply_text("👋 ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://Hari-moviez.vercel.app 📥 ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ.")
         return
 
     # --- Case 2: Deep-link /start file_xxx ---
