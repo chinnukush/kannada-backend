@@ -24,17 +24,20 @@ from pyrogram import enums
 
 pending_requests = {}  # user_id -> usr_cmd
 
-async def check_fsub(bot: Client, user_id: int, channel_id: str) -> bool:
-    try:
-        member = await bot.get_chat_member(channel_id, user_id)
-        if member.status in ("kicked", "left"):
+async def check_fsub(bot: Client, user_id: int) -> bool:
+    # User must join ALL channels listed in FSUB_CHANNEL
+    for channel_id in Telegram.FSUB_CHANNEL:
+        try:
+            member = await bot.get_chat_member(channel_id, user_id)
+            if member.status in ("kicked", "left"):
+                return False
+        except UserNotParticipant:
             return False
-        return True
-    except UserNotParticipant:
-        return False
-    except Exception as e:
-        LOGGER.error(f"FSUB check failed: {e}")
-        return False
+        except Exception as e:
+            LOGGER.error(f"FSUB check failed for {channel_id}: {e}")
+            return False
+
+
 async def send_file(bot: Client, message: Message, usr_cmd: str):
     parts = usr_cmd.split("_")
 
@@ -189,30 +192,35 @@ async def restart(bot: Client, message: Message):
 # ----------------- START COMMAND -----------------
 @StreamBot.on_message(filters.command('start') & filters.private)
 async def start(bot: Client, message: Message):
-    LOGGER.info(f"Received command: {message.text}")
     command_part = message.text.split('start ')[-1]
 
     if command_part.startswith("file_"):
         usr_cmd = command_part[len("file_"):].strip()
 
-        # --- Force Subscribe Check ---
-        channel_id = Telegram.FSUB_CHANNEL[0]  # first channel
-        is_subscribed = await check_fsub(bot, message.from_user.id, channel_id)
-
+        # Force Subscribe check
+        is_subscribed = await check_fsub(bot, message.from_user.id)
         if not is_subscribed:
-            invite_link = await bot.create_chat_invite_link(channel_id)
-            pending_requests[message.from_user.id] = usr_cmd
+            # Send join links for all FSUB_CHANNELs
+            join_links = []
+            for channel_id in Telegram.FSUB_CHANNEL:
+                invite = await bot.create_chat_invite_link(channel_id)
+                join_links.append(f"👉 [Join Channel]({invite.invite_link})")
+
             await message.reply_text(
-                f"⚠️ To access files, you must join our channel first:\n\n"
-                f"👉 [Join Channel]({invite_link.invite_link})\n\n"
-                f"After joining, the bot will automatically send your file.",
+                "⚠️ To access files, you must join our channel(s):\n\n" +
+                "\n".join(join_links) +
+                "\n\nAfter joining, the bot will automatically send your file.",
                 disable_web_page_preview=True,
                 parse_mode=ParseMode.MARKDOWN
             )
+            pending_requests[message.from_user.id] = usr_cmd
             return
 
-        # --- Continue with your existing file sending logic ---
+        # If subscribed, send file from AUTH_CHANNEL
         await send_file(bot, message, usr_cmd)
+
+    else:
+        await message.reply_text("Send me a file link to get started!")
 
     else:
         await message.reply_text(
