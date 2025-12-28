@@ -55,24 +55,36 @@ async def start(bot: Client, message: Message):
     LOGGER.info(f"Received command: {message.text}")
     command_part = message.text.split("start ", 1)[-1]
 
-    if command_part.startswith("file_"):
-        usr_cmd = command_part[len("file_"):].strip()
+    # --- Case 1: Plain /start ---
+    if not command_part.startswith("file_"):
+        await message.reply_text(
+            "👋 Welcome! I provide direct download links for movies & series.\n"
+            "Just send me a file link to get started!"
+        )
+        return
 
-        # 🔑 Force Subscribe check
-        is_subscribed = await check_fsub(bot, message.from_user.id)
-        if not is_subscribed:
-            buttons = []
-            for channel_id in Telegram.FORCE_SUB_CHANNEL:
-                invite = await bot.create_chat_invite_link(channel_id)
-                buttons.append([InlineKeyboardButton("📢 Join Channel", url=invite.invite_link)])
+    # --- Case 2: Deep-link /start file_xxx ---
+    usr_cmd = command_part[len("file_"):].strip()
 
-            await message.reply_text(
-                "⚠️ To access files, you must join our channel(s). After joining, the bot will automatically send your file.",
-                reply_markup=InlineKeyboardMarkup(buttons),
-                disable_web_page_preview=True
-            )
-            pending_requests[message.from_user.id] = usr_cmd
-            return
+    # Force Subscribe check
+    is_subscribed = await check_fsub(bot, message.from_user.id)
+    if not is_subscribed:
+        buttons = []
+        for channel in Telegram.FORCE_SUB_CHANNEL:
+            invite = await bot.create_chat_invite_link(channel)
+            buttons.append([InlineKeyboardButton("📢 Join Channel", url=invite.invite_link)])
+
+        await message.reply_text(
+            "⚠️ To access files, you must join our channel(s).\n"
+            "After joining, the bot will automatically send your file.",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            disable_web_page_preview=True
+        )
+        pending_requests[message.from_user.id] = usr_cmd
+        return
+
+    # Already subscribed → send file immediately
+    await send_file(bot, message, usr_cmd)
 
         # ✅ Parse command parts
         parts = usr_cmd.split("_")
@@ -153,13 +165,10 @@ async def start(bot: Client, message: Message):
         
 @StreamBot.on_chat_member_updated()
 async def member_update(bot: Client, event):
-    # Only handle user joins
     if not event.new_chat_member or not event.new_chat_member.user:
         return
 
     user_id = event.new_chat_member.user.id
-
-    # If user had a pending file request
     if user_id in pending_requests:
         usr_cmd = pending_requests.pop(user_id)
         try:
@@ -167,7 +176,6 @@ async def member_update(bot: Client, event):
             await send_file(bot, msg, usr_cmd)
         except Exception as e:
             LOGGER.error(f"Error sending file after join for {user_id}: {e}")
-
 
 async def delete_messages_after_delay(messages):    
     await asyncio.sleep(300)
