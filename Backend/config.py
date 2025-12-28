@@ -12,7 +12,8 @@ class Telegram:
     BOT_TOKEN = getenv("BOT_TOKEN", "")
     PORT = int(getenv("PORT", "8000"))
     BASE_URL = getenv("BASE_URL", "0.0.0.0").rstrip('/')
-    FSUB_CHANNEL = [channel.strip() for channel in (getenv("FSUB_CHANNEL") or "-1002440757122").split(",") if channel.strip()]
+    # Channel(s) users must join before accessing files
+    FORCE_SUB_CHANNEL = [ch.strip() for ch in (getenv("FORCE_SUB_CHANNEL") or "@Hari_Moviez").split(",") if ch.strip()]
     DATABASE = getenv("DATABASE", "").split(", ")
     TMDB_API = getenv("TMDB_API", "")
     IMDB_API = getenv("IMDB_API", "")
