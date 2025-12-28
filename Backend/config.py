@@ -7,13 +7,15 @@ from Backend import LOGGER
 load_dotenv(path.join(path.dirname(path.dirname(__file__)), "config.env"))
 
 class Telegram:
+    AUTH_CHANNEL = [ch.strip() for ch in (getenv("AUTH_CHANNEL") or "-1002515386092").split(",") if ch.strip()]
+    FORCE_SUB_CHANNEL = [ch.strip() for ch in (getenv("FORCE_SUB_CHANNEL") or "-1002440757122").split(",") if ch.strip()]
     API_ID = int(getenv("API_ID", "0"))
     API_HASH = getenv("API_HASH", "")
     BOT_TOKEN = getenv("BOT_TOKEN", "")
     PORT = int(getenv("PORT", "8000"))
     BASE_URL = getenv("BASE_URL", "0.0.0.0").rstrip('/')
     # Channel(s) users must join before accessing files
-    FORCE_SUB_CHANNEL = [ch.strip() for ch in (getenv("FORCE_SUB_CHANNEL") or "-1002440757122").split(",") if ch.strip()]
+    #FORCE_SUB_CHANNEL = [ch.strip() for ch in (getenv("FORCE_SUB_CHANNEL") or "-1002440757122").split(",") if ch.strip()]
     DATABASE = getenv("DATABASE", "").split(", ")
     TMDB_API = getenv("TMDB_API", "")
     IMDB_API = getenv("IMDB_API", "")
