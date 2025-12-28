@@ -132,6 +132,7 @@ async def delete_messages_after_delay(messages):
             LOGGER.error(f"Error deleting message {msg.id}: {e}")
         await asleep(2)  
 
+# ----------------- START COMMAND -----------------
 @StreamBot.on_message(filters.command('start') & filters.private)
 async def start(bot: Client, message: Message):
     LOGGER.info(f"Received command: {message.text}")
@@ -141,7 +142,7 @@ async def start(bot: Client, message: Message):
         usr_cmd = command_part[len("file_"):].strip()
 
         # --- Force Subscribe Check ---
-        channel_id = Telegram.AUTH_CHANNEL[0]  # assuming single channel
+        channel_id = Telegram.FSUB_CHANNEL[0]  # first channel
         is_subscribed = await check_fsub(bot, message.from_user.id, channel_id)
 
         if not is_subscribed:
@@ -161,81 +162,34 @@ async def start(bot: Client, message: Message):
 
     else:
         await message.reply_text(
-            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ..."
+            "ɪ ᴀᴍ ʜᴇʀᴇ ᴛᴏ ᴘʀᴏᴠɪᴅᴇ ᴅɪʀᴇᴄᴛ ᴅᴏᴡɴʟᴏᴀᴅ ʟɪɴᴋꜱ ғᴏʀ ᴍᴏᴠɪᴇꜱ & ꜱᴇʀɪᴇꜱ ғʀᴏᴍ https://hk-movies.vercel.app 📥 ɪᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
         )
+# -------------------------------------------------
 
+# ----------------- MEMBER UPDATE -----------------
 @StreamBot.on_chat_member_updated()
 async def member_update(bot: Client, event):
     if not event.new_chat_member or not event.new_chat_member.user:
         return
 
     user_id = event.new_chat_member.user.id
-
     if user_id not in pending_requests:
         return
 
     usr_cmd = pending_requests.pop(user_id)
 
     try:
-        # Send file directly to user’s private chat
         msg = await bot.send_message(user_id, "📥 Thanks for joining! Preparing your file...")
         await send_file(bot, msg, usr_cmd)
     except Exception as e:
         LOGGER.error(f"Error sending file after join for {user_id}: {e}")
         await bot.send_message(user_id, "❌ Failed to send your file. Please try again.")
+# -------------------------------------------------
 
-
-@StreamBot.on_message(filters.command('log') & filters.private & CustomFilters.owner)
-async def start(bot: Client, message: Message):
-    try:
-        path = ospath.abspath('log.txt')
-        return await message.reply_document(
-        document=path, quote=True, disable_notification=True
-        )
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-
-
-
-# Global queue for processing file updates
-file_queue = Queue()
-
-from asyncio import Lock
-
-# Global lock for database access
-db_lock = Lock()
-
-async def process_file():
-    while True:
-        metadata_info, hash, channel, msg_id, size, title = await file_queue.get()
-
-        # Acquire the lock before updating the database
-        async with db_lock:
-            updated_id = await db.insert_media(metadata_info, hash=hash, channel=channel, msg_id=msg_id, size=size, name=title)
-
-            if updated_id:
-                LOGGER.info(f"{metadata_info['media_type']} updated with ID: {updated_id}")
-            else:
-                LOGGER.info("Update failed due to validation errors.")
-
-        file_queue.task_done()
-
-
-
-# Start the file processing tasks (adjust the number of workers as needed)
-for _ in range(1):  # Two concurrent workers
-    create_task(process_file())
-
-@StreamBot.on_message(
-    filters.channel
-    & (
-        filters.document
-        | filters.video
-    )
-)
+# ----------------- FILE RECEIVE HANDLER -----------------
+@StreamBot.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(bot: Client, message: Message):
-    if str(message.chat.id) in Telegram.AUTH_CHANNEL:
+    if str(message.chat.id) in Telegram.FSUB_CHANNEL:
         try:
             if message.video or message.document:
                 file = message.video or message.document
@@ -247,14 +201,11 @@ async def file_receive_handler(bot: Client, message: Message):
                 hash = file.file_unique_id[:6]
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100","")
-                
 
                 metadata_info = await metadata(clean_filename(title), file)
                 if metadata_info is None:
                     return
 
-
-                # Add file data to the queue for processing
                 title = remove_urls(title)
                 if not title.endswith('.mkv'):
                     title += '.mkv'
@@ -268,8 +219,8 @@ async def file_receive_handler(bot: Client, message: Message):
             await message.reply_text(text=f"Got Floodwait of {str(e.value)}s",
                                 disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
     else:
-        await message.reply(text="Channel is not in AUTH_CHANNEL")
-
+        await message.reply(text="Channel is not in FSUB_CHANNEL")
+# -------------------------------------------------
 
 @Client.on_message(filters.command('caption') & filters.private & CustomFilters.owner)
 async def toggle_caption(bot: Client, message: Message):
