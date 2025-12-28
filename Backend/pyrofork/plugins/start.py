@@ -151,7 +151,23 @@ async def start(bot: Client, message: Message):
             "https://hkspot-k66q4fh4n-kushals-projects-dc9c420d.vercel.app 📥 "
             "ᴊᴜꜱᴛ ꜱᴇɴᴅ ᴀ ғɪʟᴇ ʟɪɴᴋ ᴛᴏ ɢᴇᴛ ꜱᴛᴀʀᴛᴇᴅ!"
         )
+        
+@StreamBot.on_chat_member_updated()
+async def member_update(bot: Client, event):
+    # Only handle user joins
+    if not event.new_chat_member or not event.new_chat_member.user:
+        return
 
+    user_id = event.new_chat_member.user.id
+
+    # If user had a pending file request
+    if user_id in pending_requests:
+        usr_cmd = pending_requests.pop(user_id)
+        try:
+            msg = await bot.send_message(user_id, "📥 Thanks for joining! Preparing your file...")
+            await send_file(bot, msg, usr_cmd)
+        except Exception as e:
+            LOGGER.error(f"Error sending file after join for {user_id}: {e}")
 
 
 async def delete_messages_after_delay(messages):
