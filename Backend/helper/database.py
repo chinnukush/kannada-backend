@@ -12,7 +12,6 @@ from Backend.helper.encrypt import encode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
 
 
-
 class Database:
     def __init__(self, connection_uri: str = Telegram.DATABASE, db_name: str = "projectS"):
         self._conn = None
@@ -490,6 +489,3 @@ class Database:
             return True
         LOGGER.info(f"No document found with tmdb_id {tmdb_id}.")
         return False
-
-
-db = Database()
