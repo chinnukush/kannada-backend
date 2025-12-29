@@ -7,14 +7,9 @@ from Backend.fastapi import server
 from Backend.helper.pyro import restart_notification
 from Backend.pyrofork import StreamBot
 from Backend.pyrofork.clients import initialize_clients
-from Backend.helper.database import db
+
 
 loop = get_event_loop()
-
-
-async def main():
-    await db.connect()
-    await StreamBot.start()
 
 async def start_services():
     try:
