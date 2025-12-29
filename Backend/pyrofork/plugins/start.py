@@ -67,11 +67,11 @@ async def start(bot: Client, message: Message):
         buttons = []
         for channel in Telegram.FORCE_SUB_CHANNEL:
             invite = await bot.create_chat_invite_link(channel)
-            buttons.append([InlineKeyboardButton("📢 Join Channel", url=invite.invite_link)])
+            buttons.append([InlineKeyboardButton("📢 ɪᴏɪɴ ᴜᴘᴅᴀᴛᴇ ᴄʜᴀɴɴᴇʟ 📢", url=invite.invite_link)])
 
         await message.reply_text(
-            "⚠️ To access files, you must join our channel(s).\n"
-            "After joining, the bot will automatically send your file.",
+            "<b>⚠️ ᴛᴏ ᴀᴄᴄᴇꜱꜱ ғɪʟᴇꜱ, ʏᴏᴜ ᴍᴜꜱᴛ ɪᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ.</b>\n"
+            "ᴀғᴛᴇʀ ɪᴏɪɴɪɴɢ, ᴛʜᴇ ʙᴏᴛ ᴡɪʟʟ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ꜱᴇɴᴅ ʏᴏᴜʀ ғɪʟᴇ.",
             reply_markup=InlineKeyboardMarkup(buttons),
             disable_web_page_preview=True
         )
@@ -92,7 +92,7 @@ async def member_update(bot: Client, event):
     if user_id in pending_requests:
         usr_cmd = pending_requests.pop(user_id)
         try:
-            msg = await bot.send_message(user_id, "📥 Thanks for joining! Preparing your file...")
+            msg = await bot.send_message(user_id, "📥 ᴛʜᴀɴᴋꜱ ғᴏʀ ɪᴏɪɴɪɴɢ! ᴘʀᴇᴘᴀʀɪɴɢ ʏᴏᴜʀ ғɪʟᴇ.....")
             await send_file(bot, msg, usr_cmd)
         except Exception as e:
             LOGGER.error(f"Error sending file after join for {user_id}: {e}")
