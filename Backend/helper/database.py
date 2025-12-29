@@ -23,8 +23,6 @@ class Database:
         self.connection_uri = connection_uri
         self.db_name = db_name
 
-db = Database()
-
     async def connect(self):
         """Establish a connection to the database."""
         try:
@@ -492,3 +490,6 @@ db = Database()
             return True
         LOGGER.info(f"No document found with tmdb_id {tmdb_id}.")
         return False
+
+
+db = Database()
