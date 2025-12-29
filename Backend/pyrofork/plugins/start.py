@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import create_task, sleep as asleep
 from urllib.parse import urlparse
 from Backend.logger import LOGGER
