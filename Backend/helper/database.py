@@ -14,8 +14,6 @@ from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TV
 
 
 class Database:
-db = Database()
-
     def __init__(self, connection_uri: str = Telegram.DATABASE, db_name: str = "projectS"):
         self._conn = None
         self.db = None
@@ -24,6 +22,8 @@ db = Database()
         self.deploy_config = None
         self.connection_uri = connection_uri
         self.db_name = db_name
+
+db = Database()
 
     async def connect(self):
         """Establish a connection to the database."""
