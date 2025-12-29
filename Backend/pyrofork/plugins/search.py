@@ -1,6 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from Backend.helper.database import Database
+from Backend.pyrofork import StreamBot
 
 # Initialize DB (make sure you call db.connect() at startup)
 db = Database()
