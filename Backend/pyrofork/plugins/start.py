@@ -34,7 +34,9 @@ from Backend.pyrofork.plugins.send_file import send_file
 # Store grouped uploads temporarily
 movie_updates = defaultdict(lambda: {"title": None, "media_type": None, "poster": None, "qualities": []})
 pending_posts = {}
-pending_requests = {}async def schedule_post(bot, tmdb_id):
+pending_requests = {}
+
+async def schedule_post(bot, tmdb_id):
     await asyncio.sleep(10)  # buffer time to collect all qualities
     info = movie_updates[tmdb_id]
 
