@@ -238,7 +238,7 @@ for _ in range(1):  # Two concurrent workers
     )
 )
 # ---------------- AUTH_CHANNEL Listener ----------------
-@StreamBot.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
+@Client.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
 async def file_receive_handler(bot: Client, message: Message):
     try:
         if message.video or message.document:
@@ -249,34 +249,40 @@ async def file_receive_handler(bot: Client, message: Message):
                 title = file.file_name or file.file_id
 
             msg_id = message.id
-            hash = file.file_unique_id[:6]
             size = get_readable_file_size(file.file_size)
-            channel = str(message.chat.id).replace("-100","")
 
+            # 🔎 Fetch metadata (your existing function)
             metadata_info = await metadata(clean_filename(title), file)
             if metadata_info is None:
                 return
 
-            # Queue file
+            # Queue file for backend processing
             title = remove_urls(title)
             if not title.endswith('.mkv'):
                 title += '.mkv'
-            await file_queue.put((metadata_info, hash, int(channel), msg_id, size, title))
+            await file_queue.put((metadata_info, file.file_unique_id[:6], int(str(message.chat.id).replace("-100","")), msg_id, size, title))
 
             # 🔔 Announce in UPDATE_CHANNEL
-            tmdb_id = metadata_info.get("tmdb_id")
+            tmdb_id = metadata_info.get("tmdb_id")  # ✅ use tmdb_id, not id
             media_type = metadata_info.get("media_type", "movie")
 
             if media_type == "tv":
                 post_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}"
+                caption = (
+                    f"📺 **New Series Upload:** {metadata_info.get('title', title)}\n"
+                    f"🗓️ Season {metadata_info.get('season_number')} Episode {metadata_info.get('episode_number')}\n"
+                    f"📦 Quality: {metadata_info.get('quality')}\n"
+                    f"🔗 [View Episode]({post_url})"
+                )
             else:
                 post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
+                caption = (
+                    f"🎬 **New Movie Upload:** {metadata_info.get('title', title)}\n"
+                    f"📦 Size: {size}\n"
+                    f"📦 Quality: {metadata_info.get('quality')}\n"
+                    f"🔗 [View Movie]({post_url})"
+                )
 
-            caption = (
-                f"🎬 **New Upload:** {metadata_info.get('title', title)}\n"
-                f"📦 Size: {size}\n\n"
-                f"🔗 [View Post]({post_url})"
-            )
             btn = [[InlineKeyboardButton("🔗 Open Post", url=post_url)]]
 
             await bot.send_message(
@@ -290,8 +296,7 @@ async def file_receive_handler(bot: Client, message: Message):
             await message.reply_text("Not supported")
 
     except FloodWait as e:
-        LOGGER.info(f"Sleeping for {str(e.value)}s")
-        await asleep(e.value)
+        await asyncio.sleep(e.value)
         await message.reply_text(
             text=f"Got Floodwait of {str(e.value)}s",
             disable_web_page_preview=True,
