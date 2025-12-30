@@ -237,39 +237,60 @@ for _ in range(1):  # Two concurrent workers
         | filters.video
     )
 )
+@StreamBot.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
 async def file_receive_handler(bot: Client, message: Message):
-    if str(message.chat.id) in Telegram.AUTH_CHANNEL:
-        try:
-            if message.video or message.document:
-                file = message.video or message.document
-                if Telegram.USE_CAPTION:
-                    title = message.caption.replace("\n", "\\n")
-                else:
-                    title = file.file_name or file.file_id
-                msg_id = message.id
-                hash = file.file_unique_id[:6]
-                size = get_readable_file_size(file.file_size)
-                channel = str(message.chat.id).replace("-100","")
-                
-
-                metadata_info = await metadata(clean_filename(title), file)
-                if metadata_info is None:
-                    return
-
-
-                # Add file data to the queue for processing
-                title = remove_urls(title)
-                if not title.endswith('.mkv'):
-                    title += '.mkv'
-                await file_queue.put((metadata_info, hash, int(channel), msg_id, size, title))
-
+    try:
+        if message.video or message.document:
+            file = message.video or message.document
+            if Telegram.USE_CAPTION and message.caption:
+                title = message.caption.replace("\n", "\\n")
             else:
-                await message.reply_text("Not supported")
-        except FloodWait as e:
-            LOGGER.info(f"Sleeping for {str(e.value)}s")
-            await asleep(e.value)
-            await message.reply_text(text=f"Got Floodwait of {str(e.value)}s",
-                                disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+                title = file.file_name or file.file_id
+
+            msg_id = message.id
+            hash = file.file_unique_id[:6]
+            size = get_readable_file_size(file.file_size)
+            channel = str(message.chat.id).replace("-100","")
+
+            metadata_info = await metadata(clean_filename(title), file)
+            if metadata_info is None:
+                return
+
+            # Add file data to queue
+            title = remove_urls(title)
+            if not title.endswith('.mkv'):
+                title += '.mkv'
+            await file_queue.put((metadata_info, hash, int(channel), msg_id, size, title))
+
+            # 🔔 Announce in UPDATE_CHANNEL with website link using TMDB ID
+            tmdb_id = metadata_info.get("id")  # TMDB ID from metadata
+            post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
+
+            caption = (
+                f"🎬 **New Upload:** {metadata_info.get('title', title)}\n"
+                f"📦 Size: {size}\n\n"
+                f"🔗 [View Post]({post_url})"
+            )
+            btn = [[InlineKeyboardButton("🔗 Open Post", url=post_url)]]
+
+            await bot.send_message(
+                chat_id=Telegram.UPDATE_CHANNEL,
+                text=caption,
+                reply_markup=InlineKeyboardMarkup(btn),
+                disable_web_page_preview=True
+            )
+
+        else:
+            await message.reply_text("Not supported")
+
+    except FloodWait as e:
+        LOGGER.info(f"Sleeping for {str(e.value)}s")
+        await asleep(e.value)
+        await message.reply_text(
+            text=f"Got Floodwait of {str(e.value)}s",
+            disable_web_page_preview=True,
+            parse_mode=ParseMode.MARKDOWN
+        )
 #    else:
  #       await message.reply(text="Channel is not in AUTH_CHANNEL")
 
