@@ -34,6 +34,7 @@ from Backend.pyrofork.plugins.send_file import send_file
 # Temporary stores
 movie_updates = {}
 pending_posts = {}
+pending_requests = {}
 
 import re
 
