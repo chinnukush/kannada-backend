@@ -31,6 +31,9 @@ from Backend.pyrofork.plugins.send_file import send_file
 
 pending_requests = {}
 
+# Temporary store for qualities per movie/series
+movie_updates = {}
+
 
 #--------------------------------------------------
 # --- Force Subscribe Check ---
@@ -237,53 +240,61 @@ for _ in range(1):  # Two concurrent workers
         | filters.video
     )
 )
+
 # ---------------- AUTH_CHANNEL Listener ----------------
 @Client.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
 async def file_receive_handler(bot: Client, message: Message):
     try:
         if message.video or message.document:
             file = message.video or message.document
-            if Telegram.USE_CAPTION and message.caption:
-                title = message.caption.replace("\n", "\\n")
-            else:
-                title = file.file_name or file.file_id
-
-            msg_id = message.id
+            title = message.caption if (Telegram.USE_CAPTION and message.caption) else file.file_name or file.file_id
             size = get_readable_file_size(file.file_size)
 
-            # 🔎 Fetch metadata (your existing function)
             metadata_info = await metadata(clean_filename(title), file)
             if metadata_info is None:
                 return
 
-            # Queue file for backend processing
-            title = remove_urls(title)
-            if not title.endswith('.mkv'):
-                title += '.mkv'
-            await file_queue.put((metadata_info, file.file_unique_id[:6], int(str(message.chat.id).replace("-100","")), msg_id, size, title))
-
-            # 🔔 Announce in UPDATE_CHANNEL
-            tmdb_id = metadata_info.get("tmdb_id")  # ✅ use tmdb_id, not id
+            tmdb_id = metadata_info.get("tmdb_id")
             media_type = metadata_info.get("media_type", "movie")
+            quality = metadata_info.get("quality", "Unknown")
 
+            # 🔎 Group qualities by tmdb_id
+            if tmdb_id not in movie_updates:
+                movie_updates[tmdb_id] = {
+                    "title": metadata_info.get("title", title),
+                    "media_type": media_type,
+                    "qualities": []
+                }
+
+            # Build quality-specific link
+            if media_type == "tv":
+                quality_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}?q={quality}"
+            else:
+                quality_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}?q={quality}"
+
+            # Add quality button
+            movie_updates[tmdb_id]["qualities"].append(
+                InlineKeyboardButton(f"{quality} ({size})", url=quality_url)
+            )
+
+            # 🔔 Build consolidated caption
             if media_type == "tv":
                 post_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}"
                 caption = (
-                    f"📺 **New Series Upload:** {metadata_info.get('title', title)}\n"
+                    f"📺 **New Series Upload:** {movie_updates[tmdb_id]['title']}\n"
                     f"🗓️ Season {metadata_info.get('season_number')} Episode {metadata_info.get('episode_number')}\n"
-                    f"📦 Quality: {metadata_info.get('quality')}\n"
-                    f"🔗 [View Episode]({post_url})"
+                    f"🔗 Choose your quality below 👇"
                 )
             else:
                 post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
                 caption = (
-                    f"🎬 **New Movie Upload:** {metadata_info.get('title', title)}\n"
-                    f"📦 Size: {size}\n"
-                    f"📦 Quality: {metadata_info.get('quality')}\n"
-                    f"🔗 [View Movie]({post_url})"
+                    f"🎬 **New Movie Upload:** {movie_updates[tmdb_id]['title']}\n"
+                    f"🔗 Choose your quality below 👇"
                 )
 
-            btn = [[InlineKeyboardButton("🔗 Open Post", url=post_url)]]
+            # ✅ Inline buttons: qualities + main post link
+            btn = [movie_updates[tmdb_id]["qualities"]]
+            btn.append([InlineKeyboardButton("📌 Open Post", url=post_url)])
 
             await bot.send_message(
                 chat_id=Telegram.UPDATE_CHANNEL,
@@ -292,16 +303,9 @@ async def file_receive_handler(bot: Client, message: Message):
                 disable_web_page_preview=True
             )
 
-        else:
-            await message.reply_text("Not supported")
-
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await message.reply_text(
-            text=f"Got Floodwait of {str(e.value)}s",
-            disable_web_page_preview=True,
-            parse_mode="markdown"
-        )
+        await message.reply_text(f"Got Floodwait of {e.value}s")
 #    else:
  #       await message.reply(text="Channel is not in AUTH_CHANNEL")
 
