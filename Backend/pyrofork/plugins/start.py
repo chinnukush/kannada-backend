@@ -237,6 +237,7 @@ for _ in range(1):  # Two concurrent workers
         | filters.video
     )
 )
+# ---------------- AUTH_CHANNEL Listener ----------------
 @StreamBot.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
 async def file_receive_handler(bot: Client, message: Message):
     try:
@@ -256,15 +257,20 @@ async def file_receive_handler(bot: Client, message: Message):
             if metadata_info is None:
                 return
 
-            # Add file data to queue
+            # Queue file
             title = remove_urls(title)
             if not title.endswith('.mkv'):
                 title += '.mkv'
             await file_queue.put((metadata_info, hash, int(channel), msg_id, size, title))
 
-            # 🔔 Announce in UPDATE_CHANNEL with website link using TMDB ID
-            tmdb_id = metadata_info.get("id")  # TMDB ID from metadata
-            post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
+            # 🔔 Announce in UPDATE_CHANNEL
+            tmdb_id = metadata_info.get("id")
+            media_type = metadata_info.get("media_type", "movie")
+
+            if media_type == "tv":
+                post_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}"
+            else:
+                post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
 
             caption = (
                 f"🎬 **New Upload:** {metadata_info.get('title', title)}\n"
@@ -289,7 +295,7 @@ async def file_receive_handler(bot: Client, message: Message):
         await message.reply_text(
             text=f"Got Floodwait of {str(e.value)}s",
             disable_web_page_preview=True,
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode="markdown"
         )
 #    else:
  #       await message.reply(text="Channel is not in AUTH_CHANNEL")
