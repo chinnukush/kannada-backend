@@ -4,7 +4,6 @@ from asyncio import create_task, sleep as asleep
 from urllib.parse import urlparse
 from Backend.logger import LOGGER
 from Backend import db
-from Backend.helper.utils import clean_filename
 from Backend.config import Telegram
 from Backend.helper.custom_filter import CustomFilters
 from Backend.helper.encrypt import decode_string
@@ -35,6 +34,13 @@ from Backend.pyrofork.plugins.send_file import send_file
 # Temporary stores
 movie_updates = {}
 pending_posts = {}
+
+import re
+
+def clean_filename(name: str) -> str:
+    name = re.sub(r'http\S+', '', name)
+    name = re.sub(r'[^A-Za-z0-9.\-_\s]', '', name)
+    return name.strip()
 
 async def schedule_post(bot, tmdb_id):
     await asyncio.sleep(Telegram.POST_DELAY)  # configurable delay
