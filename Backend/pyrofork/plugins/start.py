@@ -1,5 +1,4 @@
 import asyncio
-from collections import defaultdict
 from asyncio import create_task, sleep as asleep
 from urllib.parse import urlparse
 from Backend.logger import LOGGER
@@ -30,18 +29,7 @@ from datetime import datetime, timedelta
 from pyrogram.errors import FloodWait, UserNotParticipant
 from Backend.pyrofork.plugins.send_file import send_file
 
-
-# Temporary stores
-movie_updates = {}
-pending_posts = {}
 pending_requests = {}
-
-import re
-
-def clean_filename(name: str) -> str:
-    name = re.sub(r'http\S+', '', name)
-    name = re.sub(r'[^A-Za-z0-9.\-_\s]', '', name)
-    return name.strip()
 
 
 #--------------------------------------------------
@@ -249,110 +237,76 @@ for _ in range(1):  # Two concurrent workers
         | filters.video
     )
 )
-
-# ---------------- AUTH_CHANNEL Listener ----------------
-async def schedule_post(bot, tmdb_id):
-    await asyncio.sleep(Telegram.POST_DELAY)
-    info = movie_updates.get(tmdb_id)
-    if not info:
-        return
-
-    # Minimal caption: only title, season/episode, year
-    if info["media_type"] == "tv":
-        post_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}"
-        caption = (
-            f"\"📺 {info['title']}\n"
-            f"🗓️ Season {info.get('season_number')} Episode {info.get('episode_number')}\n"
-            f"📅 Year: {info.get('year')}\n"
-            f"🔗 [Open Post]({post_url})\""
-        )
-    else:
-        post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
-        caption = (
-            f"\"🎬 {info['title']}\n"
-            f"📅 Year: {info.get('year')}\n"
-            f"🔗 [Open Post]({post_url})\""
-        )
-
-    if info.get("poster"):
-        await bot.send_photo(
-            chat_id=Telegram.UPDATE_CHANNEL,
-            photo=info["poster"],
-            caption=caption,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("📌 Open Post", url=post_url)]]
-            )
-        )
-    else:
-        await bot.send_message(
-            chat_id=Telegram.UPDATE_CHANNEL,
-            text=caption,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("📌 Open Post", url=post_url)]]
-            ),
-            disable_web_page_preview=True
-        )
-
-    movie_updates.pop(tmdb_id, None)
-    pending_posts.pop(tmdb_id, None)
-
-@Client.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
 async def file_receive_handler(bot: Client, message: Message):
-    try:
-        file = message.video or message.document
-        title = message.caption if (Telegram.USE_CAPTION and message.caption) else file.file_name or file.file_id
-        size = file.file_size
-
-        metadata_info = await metadata(clean_filename(title), file)
-        if metadata_info is None:
-            return
-
-        tmdb_id = metadata_info.get("tmdb_id")
-        media_type = metadata_info.get("media_type", "movie")
-        poster = metadata_info.get("poster", None)
-
-        # 🔑 Inline backend save logic (instead of separate function)
+    if str(message.chat.id) in Telegram.AUTH_CHANNEL:
         try:
-            if media_type == "tv":
-                url = f"{Telegram.BASE_URL}/api/tvshows"
-            else:
-                url = f"{Telegram.BASE_URL}/api/movies"
+            if message.video or message.document:
+                file = message.video or message.document
+                if Telegram.USE_CAPTION:
+                    title = message.caption.replace("\n", "\\n")
+                else:
+                    title = file.file_name or file.file_id
+                msg_id = message.id
+                hash = file.file_unique_id[:6]
+                size = get_readable_file_size(file.file_size)
+                channel = str(message.chat.id).replace("-100","")
+                
 
-            payload = {
-                "tmdb_id": tmdb_id,
-                "title": metadata_info.get("title", title),
-                "year": metadata_info.get("year"),
-                "poster": poster,
-                "file_id": file.file_id,
-                "size": size
-            }
-
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(url, json=payload)
-                print(f"Backend response: {resp.status_code} {resp.text}")
-                if resp.status_code != 200:
-                    print("⚠️ Skipped update post because backend save failed")
+                metadata_info = await metadata(clean_filename(title), file)
+                if metadata_info is None:
                     return
-        except Exception as e:
-            print(f"Backend save failed: {e}")
-            return
 
-        # Store info for grouping
-        movie_updates[tmdb_id] = {
-            "title": metadata_info.get("title", title),
-            "media_type": media_type,
-            "poster": poster,
-            "season_number": metadata_info.get("season_number"),
-            "episode_number": metadata_info.get("episode_number"),
-            "year": metadata_info.get("year")
-        }
 
-        if tmdb_id not in pending_posts:
-            pending_posts[tmdb_id] = asyncio.create_task(schedule_post(bot, tmdb_id))
+                # Add file data to the queue for processing
+                title = remove_urls(title)
+                if not title.endswith('.mkv'):
+                    title += '.mkv'
+                await file_queue.put((metadata_info, hash, int(channel), msg_id, size, title))
 
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        await message.reply_text(f"Got Floodwait of {e.value}s")
+            else:
+                await message.reply_text("Not supported")
+        except FloodWait as e:
+            LOGGER.info(f"Sleeping for {str(e.value)}s")
+            await asleep(e.value)
+            await message.reply_text(text=f"Got Floodwait of {str(e.value)}s",
+                                disable_web_page_preview=True, parse_mode=ParseMode.MARKDOWN)
+#    else:
+ #       await message.reply(text="Channel is not in AUTH_CHANNEL")
+
+
+@Client.on_message(filters.command('caption') & filters.private & CustomFilters.owner)
+async def toggle_caption(bot: Client, message: Message):
+    try:
+        Telegram.USE_CAPTION = not Telegram.USE_CAPTION
+        await message.reply_text(f"Now Bot Uses {'Caption' if Telegram.USE_CAPTION else 'Filename'}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+@Client.on_message(filters.command('tmdb') & filters.private & CustomFilters.owner)
+async def toggle_tmdb(bot: Client, message: Message):
+    try:
+        Telegram.USE_TMDB = not Telegram.USE_TMDB
+        await message.reply_text(f"Now Bot Uses {'TMDB' if Telegram.USE_TMDB else 'IMDB'}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+@Client.on_message(filters.command('set') & filters.private & CustomFilters.owner)
+async def set_id(bot: Client, message: Message):
+
+    url_part = message.text.split()[1:]  # Skip the command itself
+
+    try:
+        if len(url_part) == 1:
+
+            Telegram.USE_DEFAULT_ID = url_part[0]  # Get the first element
+            await message.reply_text(f"Now Bot Uses Default URL: {Telegram.USE_DEFAULT_ID}")
+        else:
+            # Remove the default ID
+            Telegram.USE_DEFAULT_ID = None
+            await message.reply_text("Removed default ID.")
+    except Exception as e:
+        await message.reply_text(f"An error occurred: {e}")
+
 
 
 
