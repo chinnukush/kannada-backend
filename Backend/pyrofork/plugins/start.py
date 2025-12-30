@@ -264,7 +264,7 @@ async def file_receive_handler(bot: Client, message: Message):
             await file_queue.put((metadata_info, hash, int(channel), msg_id, size, title))
 
             # 🔔 Announce in UPDATE_CHANNEL
-            tmdb_id = metadata_info.get("id")
+            tmdb_id = metadata_info.get("tmdb_id")
             media_type = metadata_info.get("media_type", "movie")
 
             if media_type == "tv":
