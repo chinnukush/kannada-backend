@@ -251,30 +251,6 @@ for _ in range(1):  # Two concurrent workers
 )
 
 # ---------------- AUTH_CHANNEL Listener ----------------
-async def save_to_backend(metadata_info, file, size, title):
-    try:
-        if metadata_info["media_type"] == "tv":
-            url = f"{Telegram.BASE_URL}/api/tvshows"
-        else:
-            url = f"{Telegram.BASE_URL}/api/movies"
-
-        payload = {
-            "tmdb_id": metadata_info.get("tmdb_id"),
-            "title": metadata_info.get("title", title),
-            "year": metadata_info.get("year"),
-            "poster": metadata_info.get("poster"),
-            "file_id": file.file_id,
-            "size": size
-        }
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload)
-            print(f"Backend response: {resp.status_code} {resp.text}")
-            return resp.status_code == 200
-    except Exception as e:
-        print(f"Backend save failed: {e}")
-        return False
-
 async def schedule_post(bot, tmdb_id):
     await asyncio.sleep(Telegram.POST_DELAY)
     info = movie_updates.get(tmdb_id)
@@ -335,12 +311,33 @@ async def file_receive_handler(bot: Client, message: Message):
         media_type = metadata_info.get("media_type", "movie")
         poster = metadata_info.get("poster", None)
 
-        # Save to backend first
-        success = await save_to_backend(metadata_info, file, size, title)
-        if not success:
-            print("⚠️ Skipped update post because backend save failed")
+        # 🔑 Inline backend save logic (instead of separate function)
+        try:
+            if media_type == "tv":
+                url = f"{Telegram.BASE_URL}/api/tvshows"
+            else:
+                url = f"{Telegram.BASE_URL}/api/movies"
+
+            payload = {
+                "tmdb_id": tmdb_id,
+                "title": metadata_info.get("title", title),
+                "year": metadata_info.get("year"),
+                "poster": poster,
+                "file_id": file.file_id,
+                "size": size
+            }
+
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=payload)
+                print(f"Backend response: {resp.status_code} {resp.text}")
+                if resp.status_code != 200:
+                    print("⚠️ Skipped update post because backend save failed")
+                    return
+        except Exception as e:
+            print(f"Backend save failed: {e}")
             return
 
+        # Store info for grouping
         movie_updates[tmdb_id] = {
             "title": metadata_info.get("title", title),
             "media_type": media_type,
@@ -356,42 +353,6 @@ async def file_receive_handler(bot: Client, message: Message):
     except FloodWait as e:
         await asyncio.sleep(e.value)
         await message.reply_text(f"Got Floodwait of {e.value}s")
-
-
-
-@Client.on_message(filters.command('caption') & filters.private & CustomFilters.owner)
-async def toggle_caption(bot: Client, message: Message):
-    try:
-        Telegram.USE_CAPTION = not Telegram.USE_CAPTION
-        await message.reply_text(f"Now Bot Uses {'Caption' if Telegram.USE_CAPTION else 'Filename'}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-@Client.on_message(filters.command('tmdb') & filters.private & CustomFilters.owner)
-async def toggle_tmdb(bot: Client, message: Message):
-    try:
-        Telegram.USE_TMDB = not Telegram.USE_TMDB
-        await message.reply_text(f"Now Bot Uses {'TMDB' if Telegram.USE_TMDB else 'IMDB'}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-@Client.on_message(filters.command('set') & filters.private & CustomFilters.owner)
-async def set_id(bot: Client, message: Message):
-
-    url_part = message.text.split()[1:]  # Skip the command itself
-
-    try:
-        if len(url_part) == 1:
-
-            Telegram.USE_DEFAULT_ID = url_part[0]  # Get the first element
-            await message.reply_text(f"Now Bot Uses Default URL: {Telegram.USE_DEFAULT_ID}")
-        else:
-            # Remove the default ID
-            Telegram.USE_DEFAULT_ID = None
-            await message.reply_text("Removed default ID.")
-    except Exception as e:
-        await message.reply_text(f"An error occurred: {e}")
-
 
 
 
