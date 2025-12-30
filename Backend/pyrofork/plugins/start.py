@@ -257,12 +257,14 @@ async def file_receive_handler(bot: Client, message: Message):
             tmdb_id = metadata_info.get("tmdb_id")
             media_type = metadata_info.get("media_type", "movie")
             quality = metadata_info.get("quality", "Unknown")
+            poster = metadata_info.get("poster", None)
 
             # 🔎 Group qualities by tmdb_id
             if tmdb_id not in movie_updates:
                 movie_updates[tmdb_id] = {
                     "title": metadata_info.get("title", title),
                     "media_type": media_type,
+                    "poster": poster,
                     "qualities": []
                 }
 
@@ -296,19 +298,25 @@ async def file_receive_handler(bot: Client, message: Message):
             btn = [movie_updates[tmdb_id]["qualities"]]
             btn.append([InlineKeyboardButton("📌 Open Post", url=post_url)])
 
-            await bot.send_message(
-                chat_id=Telegram.UPDATE_CHANNEL,
-                text=caption,
-                reply_markup=InlineKeyboardMarkup(btn),
-                disable_web_page_preview=True
-            )
+            # ✅ Send poster with caption + buttons
+            if movie_updates[tmdb_id]["poster"]:
+                await bot.send_photo(
+                    chat_id=Telegram.UPDATE_CHANNEL,
+                    photo=movie_updates[tmdb_id]["poster"],
+                    caption=caption,
+                    reply_markup=InlineKeyboardMarkup(btn)
+                )
+            else:
+                await bot.send_message(
+                    chat_id=Telegram.UPDATE_CHANNEL,
+                    text=caption,
+                    reply_markup=InlineKeyboardMarkup(btn),
+                    disable_web_page_preview=True
+                )
 
     except FloodWait as e:
         await asyncio.sleep(e.value)
         await message.reply_text(f"Got Floodwait of {e.value}s")
-#    else:
- #       await message.reply(text="Channel is not in AUTH_CHANNEL")
-
 
 @Client.on_message(filters.command('caption') & filters.private & CustomFilters.owner)
 async def toggle_caption(bot: Client, message: Message):
