@@ -14,6 +14,7 @@ class Telegram:
     BOT_TOKEN = getenv("BOT_TOKEN", "")
     PORT = int(getenv("PORT", "8000"))
     BASE_URL = getenv("BASE_URL", "0.0.0.0").rstrip('/')
+    UPDATECHANNEL = int(getenv("UPDATECHANNEL", "-1002440757122"))  # 👈 add this line
     # Channel(s) users must join before accessing files
     #FORCE_SUB_CHANNEL = [ch.strip() for ch in (getenv("FORCE_SUB_CHANNEL") or "-1002440757122").split(",") if ch.strip()]
     DATABASE = getenv("DATABASE", "").split(", ")
@@ -26,3 +27,4 @@ class Telegram:
     USE_TMDB = getenv("USE_TMDB", "False").lower() == "true"
     OWNER_ID = int(getenv("OWNER_ID", "7253187871"))
     USE_DEFAULT_ID = getenv("USE_DEFAULT_ID", None)
+
