@@ -27,4 +27,4 @@ class Telegram:
     USE_TMDB = getenv("USE_TMDB", "False").lower() == "true"
     OWNER_ID = int(getenv("OWNER_ID", "7253187871"))
     USE_DEFAULT_ID = getenv("USE_DEFAULT_ID", None)
-
+    POST_DELAY = int(os.getenv("POST_DELAY", "10"))  # wait 10 seconds by default
