@@ -1,4 +1,5 @@
 import asyncio
+from collections import defaultdict
 from asyncio import create_task, sleep as asleep
 from urllib.parse import urlparse
 from Backend.logger import LOGGER
@@ -29,10 +30,55 @@ from datetime import datetime, timedelta
 from pyrogram.errors import FloodWait, UserNotParticipant
 from Backend.pyrofork.plugins.send_file import send_file
 
-pending_requests = {}
 
-# Temporary store for qualities per movie/series
-movie_updates = {}
+# Store grouped uploads temporarily
+movie_updates = defaultdict(lambda: {"title": None, "media_type": None, "poster": None, "qualities": []})
+pending_posts = {}
+pending_requests = {}async def schedule_post(bot, tmdb_id):
+    await asyncio.sleep(10)  # buffer time to collect all qualities
+    info = movie_updates[tmdb_id]
+
+    if not info["qualities"]:
+        return
+
+    # Build caption
+    if info["media_type"] == "tv":
+        post_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}"
+        caption = (
+            f"📺 **New Series Upload:** {info['title']}\n"
+            f"🔗 Choose your quality below 👇"
+        )
+    else:
+        post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
+        caption = (
+            f"🎬 **New Movie Upload:** {info['title']}\n"
+            f"🔗 Choose your quality below 👇"
+        )
+
+    # Buttons: qualities + main post
+    btn = [info["qualities"]]
+    btn.append([InlineKeyboardButton("📌 Open Post", url=post_url)])
+
+    # Send poster if available
+    if info["poster"]:
+        await bot.send_photo(
+            chat_id=Telegram.UPDATE_CHANNEL,
+            photo=info["poster"],
+            caption=caption,
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    else:
+        await bot.send_message(
+            chat_id=Telegram.UPDATE_CHANNEL,
+            text=caption,
+            reply_markup=InlineKeyboardMarkup(btn),
+            disable_web_page_preview=True
+        )
+
+    # Clear after posting
+    movie_updates.pop(tmdb_id, None)
+    pending_posts.pop(tmdb_id, None)
+
 
 
 #--------------------------------------------------
@@ -244,79 +290,36 @@ for _ in range(1):  # Two concurrent workers
 # ---------------- AUTH_CHANNEL Listener ----------------
 @Client.on_message(filters.channel & filters.chat(Telegram.AUTH_CHANNEL))
 async def file_receive_handler(bot: Client, message: Message):
-    try:
-        if message.video or message.document:
-            file = message.video or message.document
-            title = message.caption if (Telegram.USE_CAPTION and message.caption) else file.file_name or file.file_id
-            size = get_readable_file_size(file.file_size)
+    file = message.video or message.document
+    title = message.caption if (Telegram.USE_CAPTION and message.caption) else file.file_name or file.file_id
+    size = get_readable_file_size(file.file_size)
 
-            metadata_info = await metadata(clean_filename(title), file)
-            if metadata_info is None:
-                return
+    metadata_info = await metadata(clean_filename(title), file)
+    if metadata_info is None:
+        return
 
-            tmdb_id = metadata_info.get("tmdb_id")
-            media_type = metadata_info.get("media_type", "movie")
-            quality = metadata_info.get("quality", "Unknown")
-            poster = metadata_info.get("poster", None)
+    tmdb_id = metadata_info.get("tmdb_id")
+    media_type = metadata_info.get("media_type", "movie")
+    quality = metadata_info.get("quality", "Unknown")
+    poster = metadata_info.get("poster", None)
 
-            # 🔎 Group qualities by tmdb_id
-            if tmdb_id not in movie_updates:
-                movie_updates[tmdb_id] = {
-                    "title": metadata_info.get("title", title),
-                    "media_type": media_type,
-                    "poster": poster,
-                    "qualities": []
-                }
+    # Group qualities
+    movie_updates[tmdb_id]["title"] = metadata_info.get("title", title)
+    movie_updates[tmdb_id]["media_type"] = media_type
+    movie_updates[tmdb_id]["poster"] = poster
 
-            # Build quality-specific link
-            if media_type == "tv":
-                quality_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}?q={quality}"
-            else:
-                quality_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}?q={quality}"
+    if media_type == "tv":
+        quality_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}?q={quality}"
+    else:
+        quality_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}?q={quality}"
 
-            # Add quality button
-            movie_updates[tmdb_id]["qualities"].append(
-                InlineKeyboardButton(f"{quality} ({size})", url=quality_url)
-            )
+    movie_updates[tmdb_id]["qualities"].append(
+        InlineKeyboardButton(f"{quality} ({size})", url=quality_url)
+    )
 
-            # 🔔 Build consolidated caption
-            if media_type == "tv":
-                post_url = f"https://hari-moviez.vercel.app/ser/{tmdb_id}"
-                caption = (
-                    f"📺 **New Series Upload:** {movie_updates[tmdb_id]['title']}\n"
-                    f"🗓️ Season {metadata_info.get('season_number')} Episode {metadata_info.get('episode_number')}\n"
-                    f"🔗 Choose your quality below 👇"
-                )
-            else:
-                post_url = f"https://hari-moviez.vercel.app/mov/{tmdb_id}"
-                caption = (
-                    f"🎬 **New Movie Upload:** {movie_updates[tmdb_id]['title']}\n"
-                    f"🔗 Choose your quality below 👇"
-                )
-
-            # ✅ Inline buttons: qualities + main post link
-            btn = [movie_updates[tmdb_id]["qualities"]]
-            btn.append([InlineKeyboardButton("📌 Open Post", url=post_url)])
-
-            # ✅ Send poster with caption + buttons
-            if movie_updates[tmdb_id]["poster"]:
-                await bot.send_photo(
-                    chat_id=Telegram.UPDATE_CHANNEL,
-                    photo=movie_updates[tmdb_id]["poster"],
-                    caption=caption,
-                    reply_markup=InlineKeyboardMarkup(btn)
-                )
-            else:
-                await bot.send_message(
-                    chat_id=Telegram.UPDATE_CHANNEL,
-                    text=caption,
-                    reply_markup=InlineKeyboardMarkup(btn),
-                    disable_web_page_preview=True
-                )
-
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        await message.reply_text(f"Got Floodwait of {e.value}s")
+    # Schedule post if not already pending
+    if tmdb_id not in pending_posts:
+        pending_posts[tmdb_id] = asyncio.create_task(schedule_post(bot, tmdb_id))
 
 @Client.on_message(filters.command('caption') & filters.private & CustomFilters.owner)
 async def toggle_caption(bot: Client, message: Message):
